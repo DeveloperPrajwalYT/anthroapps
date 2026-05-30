@@ -427,19 +427,12 @@
 const SUPABASE_URL  = 'https://izsscwjjnrnajnhrgwhs.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlsenNjd2pqbnJuYWpuaHJnd2hzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMzMxMzAsImV4cCI6MjA5MjkwOTEzMH0.fdm2EsBWaO7tFdZTG2rcpkDRXikkbXkBC2Z6OPuUuRU';
 const DISCORD_CLIENT_ID = '1510261533152903191';
-// Supabase redirects back to THIS page after Discord login — must match exactly
-// in Supabase Dashboard → Auth → URL Configuration → Redirect URLs
 const REDIRECT_URI = 'https://anthroapps.vercel.app';
 const SITE_BASE    = 'https://anthroapps.vercel.app';
 
+// Supabase client — for DB only, NOT for auth
 const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_ANON, {
-  auth: {
-    detectSessionInUrl: true,   // picks up #access_token fragment Supabase returns
-    persistSession: true,
-    autoRefreshToken: true,
-  }
-});
+const db = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ══════════════════════════════════════════════════
 //  STATE
@@ -451,52 +444,81 @@ let currentApp  = null;
 //  INIT
 // ══════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
-  // Supabase auto-detects the #access_token hash fragment on redirect
-  // getSession() will already have the session loaded if coming back from Discord
-  await loadSession();
-  // Strip the hash fragment so the URL looks clean
-  if (window.location.hash.includes('access_token')) {
-    window.history.replaceState({}, '', window.location.pathname + window.location.search);
-  }
+  await handleDiscordCallback();
+  loadSession();
   await router();
 });
 
 // ══════════════════════════════════════════════════
-//  AUTH
+//  AUTH — pure Discord OAuth, no Supabase auth
 // ══════════════════════════════════════════════════
-async function signInDiscordSupabase() {
-  // This sends the user to Discord login page, then Discord redirects back
-  // to REDIRECT_URI with a Supabase session fragment — no Supabase domain involved
-  const { error } = await db.auth.signInWithOAuth({
-    provider: 'discord',
-    options: {
-      redirectTo: REDIRECT_URI,
-      scopes: 'identify email guilds',
-      skipBrowserRedirect: false,
-    }
+
+// Step 1: Click login → go straight to Discord
+function signInDiscordSupabase() {
+  const params = new URLSearchParams({
+    client_id:     DISCORD_CLIENT_ID,
+    redirect_uri:  REDIRECT_URI,
+    response_type: 'token',          // implicit flow — no server needed
+    scope:         'identify email',
   });
-  if (error) toast('Login error: ' + error.message, 'error');
+  window.location.href = `https://discord.com/oauth2/authorize?${params}`;
 }
 
-// Wire up both the nav login button and any inline login buttons
 document.getElementById('btn-login').onclick = signInDiscordSupabase;
 
-async function loadSession() {
-  const { data, error } = await db.auth.getSession();
-  if (data?.session?.user) {
-    const meta = data.session.user.user_metadata;
-    currentUser = {
-      id:         data.session.user.id,
-      discord_id: meta.provider_id || meta.sub || meta.id,
-      username:   meta.custom_claims?.global_name || meta.full_name || meta.name || meta.user_name || 'User',
-      avatar:     meta.avatar_url,
+// Step 2: Discord redirects back with #access_token in the URL hash
+async function handleDiscordCallback() {
+  const hash = window.location.hash;
+  if (!hash.includes('access_token')) return;
+
+  const params = new URLSearchParams(hash.slice(1)); // strip leading #
+  const token  = params.get('access_token');
+  if (!token) return;
+
+  // Clean the URL immediately
+  window.history.replaceState({}, '', window.location.pathname + window.location.search);
+
+  toast('Fetching your Discord profile…', 'info');
+
+  try {
+    const res  = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const user = await res.json();
+
+    const userData = {
+      id:         user.id,                          // discord snowflake as user id
+      discord_id: user.id,
+      username:   user.global_name || user.username,
+      avatar:     user.avatar
+        ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
+        : null,
+      token,
     };
+
+    localStorage.setItem('anthro_user', JSON.stringify(userData));
+    currentUser = userData;
     renderNav();
+    toast('Logged in as ' + userData.username, 'success');
+  } catch(e) {
+    toast('Discord login failed', 'error');
   }
 }
 
-async function logout() {
-  await db.auth.signOut();
+// Step 3: Load existing session from localStorage
+function loadSession() {
+  const raw = localStorage.getItem('anthro_user');
+  if (!raw) return;
+  try {
+    currentUser = JSON.parse(raw);
+    renderNav();
+  } catch(e) {
+    localStorage.removeItem('anthro_user');
+  }
+}
+
+function logout() {
+  localStorage.removeItem('anthro_user');
   currentUser = null;
   renderNav();
   toast('Signed out', 'info');
@@ -504,41 +526,23 @@ async function logout() {
 }
 
 function renderNav() {
-  const navUser = document.getElementById('nav-user');
+  const navUser  = document.getElementById('nav-user');
   const btnLogin = document.getElementById('btn-login');
-  const btnLogout = document.getElementById('btn-logout');
+  const btnLogout= document.getElementById('btn-logout');
   if (currentUser) {
     navUser.style.display = 'flex';
     navUser.innerHTML = `
       ${currentUser.avatar ? `<img src="${currentUser.avatar}" alt="av"/>` : ''}
       <span>${currentUser.username}</span>
     `;
-    btnLogin.style.display = 'none';
+    btnLogin.style.display  = 'none';
     btnLogout.style.display = 'block';
   } else {
-    navUser.style.display = 'none';
-    btnLogin.style.display = 'flex';
+    navUser.style.display   = 'none';
+    btnLogin.style.display  = 'flex';
     btnLogout.style.display = 'none';
   }
 }
-
-// Also listen for auth state changes
-db.auth.onAuthStateChange(async (event, session) => {
-  if (session?.user) {
-    const meta = session.user.user_metadata;
-    currentUser = {
-      id: session.user.id,
-      discord_id: meta.provider_id || meta.sub,
-      username: meta.full_name || meta.name || meta.user_name || 'User',
-      avatar: meta.avatar_url,
-    };
-    renderNav();
-    await router();
-  } else {
-    currentUser = null;
-    renderNav();
-  }
-});
 
 // ══════════════════════════════════════════════════
 //  ROUTER
