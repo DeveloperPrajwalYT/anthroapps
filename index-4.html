@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AnthroApps — Application Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #050810;
+    --bg2: #090d1a;
+    --bg3: #0d1225;
+    --card: #0f1628;
+    --card2: #131c35;
+    --border: #1e2d52;
+    --border2: #243460;
+    --blue: #3b82f6;
+    --blue2: #60a5fa;
+    --blue3: #93c5fd;
+    --blue-dim: #1d4ed8;
+    --blue-glow: rgba(59,130,246,0.25);
+    --blue-glow2: rgba(59,130,246,0.1);
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --accent: #0ea5e9;
+    --paused: #1e40af;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --font: 'Syne', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font);
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+  body::before{
+    content:'';
+    position:fixed;
+    inset:0;
+    background:
+      radial-gradient(ellipse 80% 50% at 20% -10%, rgba(59,130,246,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(14,165,233,0.08) 0%, transparent 60%);
+    pointer-events:none;
+    z-index:0;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar{width:4px;}
+  ::-webkit-scrollbar-track{background:var(--bg2);}
+  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+  /* ── NAVBAR ── */
+  nav{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 2rem;height:60px;
+    background:rgba(5,8,16,0.85);
+    backdrop-filter:blur(20px);
+    border-bottom:1px solid var(--border);
+  }
+  .nav-logo{
+    font-size:1.1rem;font-weight:800;letter-spacing:-.02em;
+    background:linear-gradient(135deg,var(--blue2),var(--accent));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;
+  }
+  .nav-logo span{color:var(--text3);-webkit-text-fill-color:var(--text3);}
+  .nav-right{display:flex;align-items:center;gap:1rem;}
+  #nav-user{
+    display:flex;align-items:center;gap:.6rem;
+    font-size:.8rem;color:var(--text2);
+    font-family:var(--mono);
+  }
+  #nav-user img{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border2);}
+  #btn-login,#btn-logout{
+    padding:.4rem 1rem;border-radius:6px;border:1px solid var(--border2);
+    background:var(--card2);color:var(--text);font-family:var(--font);
+    font-size:.8rem;font-weight:600;cursor:pointer;
+    transition:all .2s;letter-spacing:.02em;
+  }
+  #btn-login{
+    background:var(--blue-dim);border-color:var(--blue);
+    color:#fff;display:flex;align-items:center;gap:.5rem;
+  }
+  #btn-login:hover{background:var(--blue);box-shadow:0 0 18px var(--blue-glow);}
+  #btn-logout:hover{border-color:var(--danger);color:var(--danger);}
+  .discord-icon{width:16px;height:16px;}
+
+  /* ── PAGE LAYOUT ── */
+  main{
+    padding-top:80px;
+    min-height:100vh;
+    position:relative;z-index:1;
+  }
+  .page{display:none;animation:fadeIn .3s ease;}
+  .page.active{display:block;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+  /* ── HOME PAGE ── */
+  #page-home{
+    max-width:860px;margin:0 auto;padding:2rem 1.5rem;
+  }
+  .home-header{
+    margin-bottom:2.5rem;
+  }
+  .home-header h1{
+    font-size:2rem;font-weight:800;letter-spacing:-.03em;
+    background:linear-gradient(135deg,#fff 30%,var(--blue3));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;margin-bottom:.4rem;
+  }
+  .home-header p{color:var(--text2);font-size:.9rem;font-family:var(--mono);}
+
+  /* ── FORM CARD ── */
+  .form-card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:2rem;
+    position:relative;
+    overflow:hidden;
+  }
+  .form-card::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--blue),transparent);
+  }
+
+  /* webhook top bar */
+  .webhook-bar{
+    display:flex;align-items:center;gap:.8rem;
+    padding:.8rem 1rem;
+    background:var(--bg3);border:1px solid var(--border);border-radius:8px;
+    margin-bottom:1.8rem;
+  }
+  .webhook-bar label{
+    font-size:.75rem;font-family:var(--mono);color:var(--blue2);
+    white-space:nowrap;font-weight:600;letter-spacing:.04em;
+  }
+  .webhook-bar input{
+    flex:1;background:transparent;border:none;outline:none;
+    color:var(--text);font-family:var(--mono);font-size:.8rem;
+  }
+  .webhook-bar input::placeholder{color:var(--text3);}
+  .wh-dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--text3);flex-shrink:0;transition:background .3s;
+  }
+  .wh-dot.ok{background:var(--success);box-shadow:0 0 6px var(--success);}
+
+  /* form grid */
+  .form-grid{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;
+    margin-bottom:1.5rem;
+  }
+  @media(max-width:600px){.form-grid{grid-template-columns:1fr;}}
+  .field{display:flex;flex-direction:column;gap:.4rem;}
+  .field label{
+    font-size:.72rem;font-family:var(--mono);color:var(--text3);
+    text-transform:uppercase;letter-spacing:.06em;font-weight:500;
+  }
+  .field input,.field select,.field textarea{
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:7px;padding:.55rem .8rem;
+    color:var(--text);font-family:var(--font);font-size:.88rem;
+    outline:none;transition:border-color .2s,box-shadow .2s;
+  }
+  .field input:focus,.field select:focus,.field textarea:focus{
+    border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow2);
+  }
+  .field input[type=number]{appearance:textfield;}
+  .field input[type=number]::-webkit-outer-spin-button,
+  .field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+  .field select option{background:var(--bg3);}
+
+  /* questions container */
+  .questions-wrap{margin-bottom:1.5rem;}
+  .questions-title{
+    font-size:.72rem;font-family:var(--mono);color:var(--text3);
+    text-transform:uppercase;letter-spacing:.06em;margin-bottom:.8rem;font-weight:500;
+  }
+  .q-list{display:flex;flex-direction:column;gap:.6rem;}
+  .q-item{
+    display:flex;align-items:center;gap:.7rem;
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:7px;padding:.55rem .8rem;
+  }
+  .q-num{
+    font-family:var(--mono);font-size:.72rem;color:var(--blue);
+    min-width:20px;font-weight:600;
+  }
+  .q-item input{
+    flex:1;background:transparent;border:none;outline:none;
+    color:var(--text);font-family:var(--font);font-size:.88rem;
+  }
+  .q-item input::placeholder{color:var(--text3);}
+
+  /* primary button */
+  .btn-primary{
+    width:100%;padding:.75rem;border-radius:8px;border:none;
+    background:linear-gradient(135deg,var(--blue-dim),var(--blue));
+    color:#fff;font-family:var(--font);font-size:.95rem;font-weight:700;
+    cursor:pointer;letter-spacing:.02em;
+    transition:all .2s;
+    box-shadow:0 4px 20px rgba(59,130,246,0.2);
+    position:relative;overflow:hidden;
+  }
+  .btn-primary::after{
+    content:'';position:absolute;inset:0;
+    background:linear-gradient(135deg,rgba(255,255,255,.08),transparent);
+    opacity:0;transition:opacity .2s;
+  }
+  .btn-primary:hover{box-shadow:0 4px 30px rgba(59,130,246,0.4);transform:translateY(-1px);}
+  .btn-primary:hover::after{opacity:1;}
+  .btn-primary:active{transform:translateY(0);}
+  .btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+
+  /* ── APPLICATION VIEW PAGE ── */
+  #page-app{max-width:680px;margin:0 auto;padding:2rem 1.5rem;}
+
+  .app-header{
+    margin-bottom:2rem;
+  }
+  .app-meta{
+    display:flex;align-items:center;gap:.8rem;margin-bottom:.8rem;flex-wrap:wrap;
+  }
+  .app-type-badge{
+    font-family:var(--mono);font-size:.72rem;font-weight:600;
+    padding:.25rem .65rem;border-radius:20px;
+    background:rgba(59,130,246,.15);border:1px solid var(--border2);
+    color:var(--blue2);letter-spacing:.04em;text-transform:uppercase;
+  }
+  .app-server{color:var(--text2);font-size:.85rem;font-family:var(--mono);}
+
+  .app-title{
+    font-size:1.7rem;font-weight:800;letter-spacing:-.03em;margin-bottom:.3rem;
+  }
+  .app-creator-info{font-size:.8rem;color:var(--text3);font-family:var(--mono);}
+
+  /* PAUSED overlay */
+  .paused-overlay{
+    position:relative;border-radius:12px;overflow:hidden;
+    pointer-events:none;
+  }
+  .paused-overlay::after{
+    content:'PAUSED';
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:3.5rem;font-weight:800;letter-spacing:.1em;
+    color:#3b82f6;
+    background:rgba(5,8,16,.82);
+    backdrop-filter:blur(4px);
+    z-index:10;
+    pointer-events:all;
+    animation:pulseText 2.5s ease-in-out infinite;
+  }
+  @keyframes pulseText{
+    0%,100%{opacity:.9;}
+    50%{opacity:.6;}
+  }
+
+  .app-form-card{
+    background:var(--card);border:1px solid var(--border);
+    border-radius:12px;padding:1.8rem;
+    position:relative;overflow:hidden;
+  }
+  .app-form-card::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--blue),transparent);
+  }
+
+  .app-q-list{display:flex;flex-direction:column;gap:1rem;margin-bottom:1.5rem;}
+  .app-q-block{display:flex;flex-direction:column;gap:.4rem;}
+  .app-q-label{
+    font-size:.8rem;font-weight:600;color:var(--text2);
+  }
+  .app-q-label span{color:var(--blue);margin-right:.4rem;font-family:var(--mono);}
+  .app-q-block textarea{
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:7px;padding:.6rem .8rem;
+    color:var(--text);font-family:var(--font);font-size:.88rem;
+    resize:vertical;min-height:70px;outline:none;
+    transition:border-color .2s,box-shadow .2s;
+  }
+  .app-q-block textarea:focus{
+    border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow2);
+  }
+
+  /* creator controls */
+  .creator-controls{
+    display:flex;gap:.8rem;margin-bottom:1.5rem;flex-wrap:wrap;
+  }
+  .btn-pause,.btn-resume{
+    padding:.5rem 1.2rem;border-radius:7px;border:1px solid;
+    font-family:var(--font);font-size:.82rem;font-weight:600;
+    cursor:pointer;transition:all .2s;letter-spacing:.02em;
+  }
+  .btn-pause{
+    background:rgba(30,64,175,.2);border-color:var(--paused);
+    color:var(--blue2);
+  }
+  .btn-pause:hover{background:rgba(30,64,175,.4);}
+  .btn-resume{
+    background:rgba(34,197,94,.1);border-color:var(--success);
+    color:var(--success);
+  }
+  .btn-resume:hover{background:rgba(34,197,94,.2);}
+  .btn-copy-link{
+    padding:.5rem 1.2rem;border-radius:7px;border:1px solid var(--border2);
+    background:var(--card2);color:var(--text2);
+    font-family:var(--font);font-size:.82rem;font-weight:600;
+    cursor:pointer;transition:all .2s;
+  }
+  .btn-copy-link:hover{border-color:var(--blue);color:var(--blue);}
+
+  /* ── STATUS TOAST ── */
+  #toast{
+    position:fixed;bottom:1.5rem;right:1.5rem;z-index:999;
+    background:var(--card2);border:1px solid var(--border2);
+    border-radius:9px;padding:.7rem 1.2rem;
+    font-size:.82rem;font-family:var(--mono);color:var(--text);
+    box-shadow:0 8px 30px rgba(0,0,0,.4);
+    transform:translateY(20px);opacity:0;
+    transition:all .3s;pointer-events:none;
+    max-width:300px;
+  }
+  #toast.show{transform:translateY(0);opacity:1;}
+  #toast.success{border-color:var(--success);color:var(--success);}
+  #toast.error{border-color:var(--danger);color:var(--danger);}
+  #toast.info{border-color:var(--blue);color:var(--blue2);}
+
+  /* ── LOADING ── */
+  .spinner{
+    width:36px;height:36px;border-radius:50%;
+    border:2px solid var(--border2);border-top-color:var(--blue);
+    animation:spin .7s linear infinite;margin:3rem auto;display:block;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ── LOGIN GATE ── */
+  .login-gate{
+    text-align:center;padding:3rem 1.5rem;
+    background:var(--card);border:1px solid var(--border);
+    border-radius:14px;margin-top:2rem;
+  }
+  .login-gate h3{font-size:1.1rem;margin-bottom:.5rem;}
+  .login-gate p{color:var(--text2);font-size:.85rem;margin-bottom:1.5rem;}
+  .login-gate .btn-primary{max-width:220px;margin:0 auto;}
+
+  /* ── SUBMITTED SUCCESS ── */
+  .success-screen{
+    text-align:center;padding:3rem 1.5rem;
+    background:var(--card);border:1px solid rgba(34,197,94,.3);
+    border-radius:14px;
+  }
+  .success-icon{
+    font-size:3rem;margin-bottom:1rem;
+    animation:popIn .4s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes popIn{from{transform:scale(0);}to{transform:scale(1);}}
+  .success-screen h3{font-size:1.2rem;color:var(--success);margin-bottom:.5rem;}
+  .success-screen p{color:var(--text2);font-size:.85rem;}
+
+  /* ── MISC ── */
+  .divider{
+    height:1px;background:var(--border);
+    margin:1.5rem 0;
+  }
+  .tag{
+    display:inline-flex;align-items:center;gap:.3rem;
+    font-size:.72rem;font-family:var(--mono);
+    padding:.2rem .5rem;border-radius:4px;
+    background:var(--bg3);border:1px solid var(--border);
+    color:var(--text3);
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">Anthro<span>Apps</span></div>
+  <div class="nav-right">
+    <div id="nav-user" style="display:none"></div>
+    <button id="btn-login" onclick="loginWithDiscord()">
+      <svg class="discord-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
+      </svg>
+      Login with Discord
+    </button>
+    <button id="btn-logout" style="display:none" onclick="logout()">Sign Out</button>
+  </div>
+</nav>
+
+<main>
+  <!-- HOME PAGE -->
+  <div id="page-home" class="page active">
+    <div class="home-header">
+      <h1>Application Manager</h1>
+      <p>// Create & manage applications. Share via unique link.</p>
+    </div>
+
+    <div id="home-content">
+      <!-- filled by JS -->
+    </div>
+  </div>
+
+  <!-- APP VIEW PAGE -->
+  <div id="page-app" class="page">
+    <div id="app-content">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════════
+const SUPABASE_URL  = 'https://izsscwjjnrnajnhrgwhs.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlsenNjd2pqbnJuYWpuaHJnd2hzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMzMxMzAsImV4cCI6MjA5MjkwOTEzMH0.fdm2EsBWaO7tFdZTG2rcpkDRXikkbXkBC2Z6OPuUuRU';
+const DISCORD_CLIENT_ID = '1510261533152903191';
+// Supabase redirects back to THIS page after Discord login — must match exactly
+// in Supabase Dashboard → Auth → URL Configuration → Redirect URLs
+const REDIRECT_URI = 'https://anthroapps.vercel.app';
+const SITE_BASE    = 'https://anthroapps.vercel.app';
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: {
+    detectSessionInUrl: true,   // picks up #access_token fragment Supabase returns
+    persistSession: true,
+    autoRefreshToken: true,
+  }
+});
+
+// ══════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════
+let currentUser = null;
+let currentApp  = null;
+
+// ══════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  // Supabase auto-detects the #access_token hash fragment on redirect
+  // getSession() will already have the session loaded if coming back from Discord
+  await loadSession();
+  // Strip the hash fragment so the URL looks clean
+  if (window.location.hash.includes('access_token')) {
+    window.history.replaceState({}, '', window.location.pathname + window.location.search);
+  }
+  await router();
+});
+
+// ══════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════
+async function signInDiscordSupabase() {
+  // This sends the user to Discord login page, then Discord redirects back
+  // to REDIRECT_URI with a Supabase session fragment — no Supabase domain involved
+  const { error } = await db.auth.signInWithOAuth({
+    provider: 'discord',
+    options: {
+      redirectTo: REDIRECT_URI,
+      scopes: 'identify email guilds',
+      skipBrowserRedirect: false,
+    }
+  });
+  if (error) toast('Login error: ' + error.message, 'error');
+}
+
+// Wire up both the nav login button and any inline login buttons
+document.getElementById('btn-login').onclick = signInDiscordSupabase;
+
+async function loadSession() {
+  const { data, error } = await db.auth.getSession();
+  if (data?.session?.user) {
+    const meta = data.session.user.user_metadata;
+    currentUser = {
+      id:         data.session.user.id,
+      discord_id: meta.provider_id || meta.sub || meta.id,
+      username:   meta.custom_claims?.global_name || meta.full_name || meta.name || meta.user_name || 'User',
+      avatar:     meta.avatar_url,
+    };
+    renderNav();
+  }
+}
+
+async function logout() {
+  await db.auth.signOut();
+  currentUser = null;
+  renderNav();
+  toast('Signed out', 'info');
+  router();
+}
+
+function renderNav() {
+  const navUser = document.getElementById('nav-user');
+  const btnLogin = document.getElementById('btn-login');
+  const btnLogout = document.getElementById('btn-logout');
+  if (currentUser) {
+    navUser.style.display = 'flex';
+    navUser.innerHTML = `
+      ${currentUser.avatar ? `<img src="${currentUser.avatar}" alt="av"/>` : ''}
+      <span>${currentUser.username}</span>
+    `;
+    btnLogin.style.display = 'none';
+    btnLogout.style.display = 'block';
+  } else {
+    navUser.style.display = 'none';
+    btnLogin.style.display = 'flex';
+    btnLogout.style.display = 'none';
+  }
+}
+
+// Also listen for auth state changes
+db.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) {
+    const meta = session.user.user_metadata;
+    currentUser = {
+      id: session.user.id,
+      discord_id: meta.provider_id || meta.sub,
+      username: meta.full_name || meta.name || meta.user_name || 'User',
+      avatar: meta.avatar_url,
+    };
+    renderNav();
+    await router();
+  } else {
+    currentUser = null;
+    renderNav();
+  }
+});
+
+// ══════════════════════════════════════════════════
+//  ROUTER
+// ══════════════════════════════════════════════════
+async function router() {
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get('r');
+  if (ref) {
+    showPage('app');
+    await loadAppPage(ref);
+  } else {
+    showPage('home');
+    renderHomePage();
+  }
+}
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════
+//  HOME PAGE
+// ══════════════════════════════════════════════════
+function renderHomePage() {
+  const wrap = document.getElementById('home-content');
+  if (!currentUser) {
+    wrap.innerHTML = `
+      <div class="login-gate">
+        <h3>Create Applications</h3>
+        <p>Sign in with Discord to create and manage applications.</p>
+        <button class="btn-primary" onclick="signInDiscordSupabase()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:.4rem">
+            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
+          </svg>
+          Login with Discord
+        </button>
+      </div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <div class="form-card">
+      <div class="webhook-bar">
+        <span class="wh-dot" id="wh-dot"></span>
+        <label>WEBHOOK</label>
+        <input type="url" id="inp-webhook" placeholder="https://discord.com/api/webhooks/..." oninput="checkWebhook(this.value)"/>
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label>Server Name</label>
+          <input type="text" id="inp-server" placeholder="My Discord Server"/>
+        </div>
+        <div class="field">
+          <label>Application Type</label>
+          <input type="text" id="inp-type" placeholder="Staff, Mod, Helper…"/>
+        </div>
+        <div class="field">
+          <label>No. of Questions</label>
+          <input type="number" id="inp-qcount" placeholder="3" min="1" max="25" oninput="renderQFields(this.value)"/>
+        </div>
+      </div>
+      <div class="questions-wrap" id="questions-wrap" style="display:none">
+        <div class="questions-title">Questions</div>
+        <div class="q-list" id="q-list"></div>
+      </div>
+      <button class="btn-primary" id="btn-create" onclick="createApplication()">Create Application →</button>
+    </div>`;
+}
+
+function checkWebhook(val) {
+  const dot = document.getElementById('wh-dot');
+  if (dot) dot.className = 'wh-dot' + (val.includes('discord.com/api/webhooks') ? ' ok' : '');
+}
+
+function renderQFields(n) {
+  n = parseInt(n);
+  const wrap = document.getElementById('questions-wrap');
+  const list = document.getElementById('q-list');
+  if (!n || n < 1) { wrap.style.display = 'none'; return; }
+  n = Math.min(n, 25);
+  wrap.style.display = 'block';
+  list.innerHTML = '';
+  for (let i = 1; i <= n; i++) {
+    list.innerHTML += `
+      <div class="q-item">
+        <span class="q-num">Q${i}</span>
+        <input type="text" placeholder="Enter question ${i}…" id="q-${i}"/>
+      </div>`;
+  }
+}
+
+async function createApplication() {
+  const webhook = document.getElementById('inp-webhook')?.value?.trim();
+  const server  = document.getElementById('inp-server')?.value?.trim();
+  const type    = document.getElementById('inp-type')?.value?.trim();
+  const qcount  = parseInt(document.getElementById('inp-qcount')?.value);
+
+  if (!webhook || !server || !type || !qcount) {
+    toast('Fill all fields first', 'error'); return;
+  }
+  if (!webhook.includes('discord.com/api/webhooks')) {
+    toast('Invalid webhook URL', 'error'); return;
+  }
+
+  const questions = [];
+  for (let i = 1; i <= qcount; i++) {
+    const q = document.getElementById(`q-${i}`)?.value?.trim();
+    if (!q) { toast(`Question ${i} is empty`, 'error'); return; }
+    questions.push(q);
+  }
+
+  const btn = document.getElementById('btn-create');
+  btn.disabled = true; btn.textContent = 'Creating…';
+
+  // Generate unique ref code
+  const refCode = generateRef();
+
+  const payload = {
+    ref_code:   refCode,
+    creator_id: currentUser.id,
+    creator_discord_id: currentUser.discord_id,
+    creator_username: currentUser.username,
+    server_name: server,
+    app_type: type,
+    webhook_url: webhook,
+    questions: questions,
+    paused: false,
+    created_at: new Date().toISOString(),
+  };
+
+  const { error } = await db.from('applications').insert(payload);
+  if (error) {
+    toast('DB error: ' + error.message, 'error');
+    btn.disabled = false; btn.textContent = 'Create Application →';
+    return;
+  }
+
+  toast('Application created!', 'success');
+  // Navigate to app page
+  const url = new URL(window.location.href);
+  url.searchParams.set('r', refCode);
+  window.history.pushState({}, '', url.toString());
+  showPage('app');
+  await loadAppPage(refCode);
+}
+
+function generateRef() {
+  // IP is not accessible client-side reliably, so use a random base64 code
+  const arr = new Uint8Array(12);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+// ══════════════════════════════════════════════════
+//  APP VIEW PAGE
+// ══════════════════════════════════════════════════
+async function loadAppPage(refCode) {
+  const wrap = document.getElementById('app-content');
+  wrap.innerHTML = '<div class="spinner"></div>';
+
+  const { data: app, error } = await db
+    .from('applications')
+    .select('*')
+    .eq('ref_code', refCode)
+    .single();
+
+  if (error || !app) {
+    wrap.innerHTML = `<div class="login-gate"><h3>Application not found</h3><p>This link may be invalid or expired.</p></div>`;
+    return;
+  }
+
+  currentApp = app;
+  const isCreator = currentUser?.id === app.creator_id;
+
+  let creatorControls = '';
+  if (isCreator) {
+    creatorControls = `
+      <div class="creator-controls">
+        ${app.paused
+          ? `<button class="btn-resume" onclick="togglePause(false)">▶ Resume Application</button>`
+          : `<button class="btn-pause"  onclick="togglePause(true)">⏸ Pause Application</button>`
+        }
+        <button class="btn-copy-link" onclick="copyLink()">🔗 Copy Link</button>
+      </div>`;
+  }
+
+  const formContent = `
+    <div id="app-form-wrap" class="${app.paused ? 'paused-overlay' : ''}">
+      <div class="app-form-card">
+        <div class="app-q-list" id="app-q-list">
+          ${app.questions.map((q,i)=>`
+            <div class="app-q-block">
+              <div class="app-q-label"><span>Q${i+1}</span>${q}</div>
+              <textarea id="ans-${i}" placeholder="Your answer…" ${app.paused?'disabled':''}></textarea>
+            </div>`).join('')}
+        </div>
+        ${!currentUser
+          ? `<div class="login-gate" style="margin-top:0;border:none;background:transparent;padding:0">
+              <p style="margin-bottom:.8rem">Sign in to submit this application.</p>
+              <button class="btn-primary" onclick="signInDiscordSupabase()">Login with Discord</button>
+            </div>`
+          : `<button class="btn-primary" ${app.paused?'disabled':''} onclick="submitApplication()">Submit Application →</button>`
+        }
+      </div>
+    </div>`;
+
+  wrap.innerHTML = `
+    <div class="app-header">
+      <div class="app-meta">
+        <span class="app-type-badge">${app.app_type}</span>
+        <span class="app-server">${app.server_name}</span>
+      </div>
+      <div class="app-title">${app.app_type} Application</div>
+      <div class="app-creator-info">Created by ${app.creator_username} · ${app.questions.length} questions</div>
+    </div>
+    ${creatorControls}
+    ${formContent}`;
+}
+
+async function togglePause(pause) {
+  if (!currentApp) return;
+  const { error } = await db
+    .from('applications')
+    .update({ paused: pause })
+    .eq('ref_code', currentApp.ref_code);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  toast(pause ? 'Application paused' : 'Application resumed', 'info');
+  await loadAppPage(currentApp.ref_code);
+}
+
+function copyLink() {
+  const link = `${SITE_BASE}/?r=${currentApp.ref_code}`;
+  navigator.clipboard.writeText(link).then(() => toast('Link copied!', 'success'));
+}
+
+async function submitApplication() {
+  if (!currentUser || !currentApp) return;
+  if (currentApp.paused) { toast('Application is paused', 'error'); return; }
+
+  const answers = [];
+  for (let i = 0; i < currentApp.questions.length; i++) {
+    const a = document.getElementById(`ans-${i}`)?.value?.trim();
+    if (!a) { toast(`Answer Q${i+1} first`, 'error'); return; }
+    answers.push(a);
+  }
+
+  const btn = document.querySelector('#app-content .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='Submitting…';}
+
+  const submission = {
+    app_ref:    currentApp.ref_code,
+    user_id:    currentUser.id,
+    discord_id: currentUser.discord_id,
+    username:   currentUser.username,
+    answers:    answers,
+    submitted_at: new Date().toISOString(),
+  };
+
+  const { error: dbErr } = await db.from('submissions').insert(submission);
+  if (dbErr && !dbErr.message.includes('duplicate')) {
+    toast('DB error: ' + dbErr.message, 'error');
+    if(btn){btn.disabled=false;btn.textContent='Submit Application →';}
+    return;
+  }
+
+  // Send to Discord webhook
+  const webhookErr = await sendToWebhook(currentApp, submission);
+  if (webhookErr) toast('Webhook warn: ' + webhookErr, 'info');
+
+  // Show success screen
+  const formWrap = document.getElementById('app-form-wrap');
+  if (formWrap) {
+    formWrap.innerHTML = `
+      <div class="success-screen">
+        <div class="success-icon">✅</div>
+        <h3>Application Submitted!</h3>
+        <p>Your application has been received and sent to the server.</p>
+      </div>`;
+  }
+  toast('Submitted successfully!', 'success');
+}
+
+async function sendToWebhook(app, submission) {
+  const now = new Date();
+  const timeStr = now.toLocaleString('en-US', {
+    year:'numeric',month:'short',day:'numeric',
+    hour:'2-digit',minute:'2-digit',timeZoneName:'short'
+  });
+
+  // Build Q&A fields
+  const fields = app.questions.map((q, i) => ({
+    name: `Q${i+1}: ${q}`,
+    value: submission.answers[i] || '*(no answer)*',
+    inline: false
+  }));
+
+  const payload = {
+    content: `<@${submission.discord_id}>`,
+    embeds: [{
+      color: 0x3b82f6,
+      title: `New ${app.app_type} Application`,
+      description: `**Server:** ${app.server_name}`,
+      fields: [
+        { name: 'UserID', value: submission.discord_id, inline: true },
+        { name: 'Username', value: submission.username, inline: true },
+        { name: 'Time', value: timeStr, inline: false },
+        { name: 'Application Type', value: app.app_type, inline: true },
+        { name: '─────────────────', value: '\u200b', inline: false },
+        ...fields
+      ],
+      footer: { text: `AnthroApps · ref: ${app.ref_code}` },
+      timestamp: new Date().toISOString()
+    }]
+  };
+
+  try {
+    const res = await fetch(app.webhook_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) return `HTTP ${res.status}`;
+    return null;
+  } catch(e) {
+    return e.message;
+  }
+}
+
+// ══════════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════════
+let toastTimer;
+function toast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 3200);
+}
+</script>
+</body>
+</html>
